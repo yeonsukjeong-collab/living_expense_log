@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>가계부 · 신용카드 사용 내역</title>
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="top">
+      <div>
+        <p class="eyebrow">가계부 · 신용카드 사용 내역</p>
+        <h1>내 가계부</h1>
+        <p class="meta" id="meta-line">불러오는 중…</p>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <a class="btn btn-sm" href="/api/export" download>내보내기</a>
+        <button class="btn btn-sm" id="logout-btn">로그아웃</button>
+      </div>
+    </header>
+
+    <section class="panel">
+      <h2>카드 문자 붙여넣기</h2>
+      <p class="hint">문자 하나 또는 여러 개를 그대로 붙여넣으세요. KB국민카드 · 현대카드 · 신한카드(체크) 형식을 자동으로 인식합니다.</p>
+      <textarea class="sms-input" id="sms-input" placeholder="예)&#10;KB국민카드9046&#10;승인&#10;91,820 원(일시불)&#10;(주)세계로유통 수지&#10;고객명 정*석님&#10;승인시각 08/07 12:02&#10;누적 767,844원"></textarea>
+      <div class="panel-actions">
+        <button class="btn btn-primary" id="parse-btn">파싱하기</button>
+      </div>
+      <div class="preview-list" id="preview-list"></div>
+    </section>
+
+    <section class="panel">
+      <div class="stat-row">
+        <div class="stat total">
+          <span class="label">총 지출</span>
+          <span class="value num" id="stat-total">0원</span>
+        </div>
+        <div class="stat">
+          <span class="label">건수</span>
+          <span class="value num" id="stat-count">0건</span>
+        </div>
+        <div class="stat">
+          <span class="label">기간</span>
+          <span class="value num" id="stat-range">-</span>
+        </div>
+      </div>
+      <p class="breakdown-label">카드사별 사용 비중</p>
+      <div class="bar" id="bar"></div>
+      <div class="legend" id="legend"></div>
+    </section>
+
+    <section class="cards" id="cards"></section>
+
+    <footer class="note">
+      <p>영수증이 있는 거래는 항목을 눌러 펼친 뒤 상세 항목을 추가할 수 있습니다. 무료 DB 플랜을 쓰는 경우 데이터가 만료될 수 있으니 <a href="/api/export" download>내보내기</a>로 주기적으로 백업하세요.</p>
+    </footer>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

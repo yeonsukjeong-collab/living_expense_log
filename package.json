@@ -1,0 +1,20 @@
+{
+  "name": "living-expense-log",
+  "version": "1.0.0",
+  "description": "신용카드 문자 내역을 파싱해 정리하는 개인 가계부",
+  "private": true,
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "pg": "^8.12.0"
+  }
+}

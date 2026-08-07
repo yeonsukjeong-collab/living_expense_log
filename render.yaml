@@ -1,0 +1,24 @@
+databases:
+  - name: living-expense-log-db
+    plan: free
+    databaseName: living_expense_log
+    user: living_expense_log
+
+services:
+  - type: web
+    name: living-expense-log
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: living-expense-log-db
+          property: connectionString
+      - key: APP_PASSWORD
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: NODE_ENV
+        value: production
