@@ -1,6 +1,8 @@
 "use strict";
 
 const openIds = new Set();
+let lastTransactions = [];
+let uploadingTxId = null;
 
 // ---- helpers ----
 function esc(str) {
@@ -33,15 +35,12 @@ function toKstInputValue(iso) {
 function fromKstInputValue(value) {
   return `${value}:00+09:00`;
 }
-function formatKstShort(iso) {
+const WEEKDAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
+function formatKstDateTimeWithWeekday(iso) {
   const d = toKstDate(iso);
-  return `${pad2(d.getUTCMonth() + 1)}.${pad2(d.getUTCDate())}<br>${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
+  const weekday = WEEKDAYS_KO[d.getUTCDay()];
+  return `${pad2(d.getUTCMonth() + 1)}.${pad2(d.getUTCDate())} (${weekday}) ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
 }
-function formatDateShort(iso) {
-  const d = toKstDate(iso);
-  return `${pad2(d.getUTCMonth() + 1)}.${pad2(d.getUTCDate())}`;
-}
-
 function showToast(msg, isError) {
   const el = document.getElementById("toast");
   el.textContent = msg;
@@ -71,16 +70,13 @@ async function apiFetch(url, opts = {}) {
 const apiGet = (url) => apiFetch(url);
 const apiPost = (url, body) => apiFetch(url, { method: "POST", body: JSON.stringify(body) });
 const apiPatch = (url, body) => apiFetch(url, { method: "PATCH", body: JSON.stringify(body) });
+const apiPut = (url, body) => apiFetch(url, { method: "PUT", body: JSON.stringify(body) });
 const apiDelete = (url) => apiFetch(url, { method: "DELETE" });
 
 // ---- summary ----
 function renderSummary(s) {
   document.getElementById("stat-total").textContent = money(s.total);
   document.getElementById("stat-count").textContent = s.count + "건";
-  document.getElementById("stat-range").textContent = s.count
-    ? `${formatDateShort(s.earliest)} – ${formatDateShort(s.latest)}`
-    : "-";
-  document.getElementById("meta-line").textContent = s.count ? `총 ${s.count}건 수집됨` : "아직 거래가 없습니다";
 
   const bar = document.getElementById("bar");
   const legend = document.getElementById("legend");
@@ -136,15 +132,25 @@ function renderGroup(g) {
 }
 
 function renderTxRow(t) {
-  const hasItems = t.items && t.items.length;
   const open = openIds.has(String(t.id));
   return `
     <li class="tx" data-id="${t.id}">
       <div class="tx-row" data-action="toggle">
-        <div class="tx-date num">${formatKstShort(t.occurred_at)}</div>
-        <div class="tx-merchant">${esc(t.merchant)}${t.method ? `<span class="method">${esc(t.method)}</span>` : ""}</div>
-        <div class="tx-amount num">${money(t.amount)}</div>
-        <div>${hasItems ? `<span class="chip filled">영수증 ${t.items.length}개</span>` : `<span class="chip">영수증 미등록</span>`}</div>
+        <div class="tx-line1">
+          <span class="tx-merchant">${esc(t.merchant)}</span>
+          <span class="badges">
+            ${
+              t.has_receipt_image
+                ? `<button type="button" class="chip filled chip-btn" data-action="view-receipt" data-tx-id="${t.id}">영수증 사진</button>`
+                : `<button type="button" class="chip chip-btn" data-action="register-receipt" data-tx-id="${t.id}">영수증 사진 등록</button>`
+            }
+          </span>
+          <span class="tx-amount num">${money(t.amount)}</span>
+        </div>
+        <div class="tx-line2">
+          <span class="tx-date num">${formatKstDateTimeWithWeekday(t.occurred_at)}</span>
+          ${t.memo ? `<span class="tx-memo">${esc(t.memo)}</span>` : ""}
+        </div>
       </div>
       <div class="tx-detail ${open ? "open" : ""}" data-detail>
         ${renderTxDetail(t)}
@@ -154,41 +160,8 @@ function renderTxRow(t) {
 }
 
 function renderTxDetail(t) {
-  const items = t.items || [];
-  const itemsSum = items.reduce((a, i) => a + i.price * i.qty, 0);
-  const mismatch = items.length && itemsSum !== t.amount;
-
   return `
     <div class="view-block">
-      <ul class="items-list">
-        ${
-          items.length
-            ? items
-                .map(
-                  (i) => `
-          <li class="item-row" data-item-id="${i.id}">
-            <span class="name">${esc(i.name)}</span>
-            <span class="qty">x${i.qty}</span>
-            <span class="price num">${money(i.price * i.qty)}</span>
-            <button class="btn btn-sm btn-ghost" data-action="delete-item" data-item-id="${i.id}" aria-label="항목 삭제">삭제</button>
-          </li>`
-                )
-                .join("")
-            : '<p class="hint" style="margin:8px 0 0">등록된 영수증 항목이 없습니다.</p>'
-        }
-      </ul>
-      <form class="item-form" data-action="add-item" data-tx-id="${t.id}">
-        <input type="text" name="name" placeholder="항목명" required />
-        <input type="number" name="price" placeholder="가격" min="0" required />
-        <input type="number" name="qty" placeholder="수량" min="1" value="1" />
-        <button type="submit" class="btn btn-sm">추가</button>
-      </form>
-      ${
-        items.length
-          ? `<p class="items-sum ${mismatch ? "mismatch" : ""}">항목 합계 ${money(itemsSum)}${mismatch ? ` · 결제금액과 ${money(Math.abs(itemsSum - t.amount))} 차이` : " · 결제금액과 일치"}</p>`
-          : ""
-      }
-      <p class="hint" style="margin:10px 0 0">${t.balance_label ? esc(t.balance_label) + " " + money(t.balance_amount) : "누적/잔액 정보 없음"}</p>
       <div class="actions">
         <button class="btn btn-sm" data-action="edit-tx">거래 정보 수정</button>
         <button class="btn btn-sm btn-danger" data-action="delete-tx" data-tx-id="${t.id}">거래 삭제</button>
@@ -198,7 +171,8 @@ function renderTxDetail(t) {
       <label>카드사 <input name="card_company" value="${esc(t.card_company)}" required /></label>
       <label>카드 표시 <input name="card_label" value="${esc(t.card_label || "")}" /></label>
       <label>가맹점 <input name="merchant" value="${esc(t.merchant)}" required /></label>
-      <label>결제방식 <input name="method" value="${esc(t.method || "")}" /></label>
+      <label>메모 <input name="memo" value="${esc(t.memo || "")}" placeholder="예: 목장모임 준비" /></label>
+      <input type="hidden" name="method" value="${esc(t.method || "")}" />
       <label>금액 <input name="amount" type="number" min="0" value="${t.amount}" required /></label>
       <label>거래일시 <input name="occurred_at" type="datetime-local" value="${toKstInputValue(t.occurred_at)}" required /></label>
       <label>누적/잔액 라벨 <input name="balance_label" value="${esc(t.balance_label || "")}" /></label>
@@ -209,6 +183,46 @@ function renderTxDetail(t) {
       </div>
     </form>
   `;
+}
+
+// ---- receipt photo (registration + view) ----
+function loadImageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("이미지를 불러올 수 없습니다."));
+    };
+    img.src = url;
+  });
+}
+
+async function compressImageToDataUrl(file, maxDim = 1600, quality = 0.82) {
+  const img = await loadImageFromFile(file);
+  const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(img.width * scale);
+  canvas.height = Math.round(img.height * scale);
+  canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", quality);
+}
+
+function openReceiptModal(imageSrc, txId) {
+  const modal = document.getElementById("receipt-modal");
+  document.getElementById("receipt-modal-img").src = imageSrc;
+  modal.dataset.txId = txId;
+  modal.classList.add("open");
+}
+
+function closeReceiptModal() {
+  const modal = document.getElementById("receipt-modal");
+  modal.classList.remove("open");
+  document.getElementById("receipt-modal-img").src = "";
 }
 
 // ---- preview (parse) ----
@@ -229,7 +243,8 @@ function renderPreviewCard(p) {
           <label>카드사 <input name="card_company" value="${esc(d.card_company)}" /></label>
           <label>카드 표시 <input name="card_label" value="${esc(d.card_label || "")}" /></label>
           <label>가맹점 <input name="merchant" value="${esc(d.merchant)}" /></label>
-          <label>결제방식 <input name="method" value="${esc(d.method || "")}" /></label>
+          <label>메모 <input name="memo" placeholder="예: 목장모임 준비" /></label>
+          <input type="hidden" name="method" value="${esc(d.method || "")}" />
           <label>금액 <input name="amount" type="number" min="0" value="${d.amount}" /></label>
           <label>거래일시 <input name="occurred_at" type="datetime-local" value="${toKstInputValue(d.occurred_at)}" /></label>
           <label>누적/잔액 라벨 <input name="balance_label" value="${esc(d.balance_label || "")}" /></label>
@@ -250,7 +265,8 @@ function renderPreviewCard(p) {
         <label>카드사 <input name="card_company" placeholder="예: KB국민카드" /></label>
         <label>카드 표시 <input name="card_label" placeholder="선택" /></label>
         <label>가맹점 <input name="merchant" placeholder="가맹점명" /></label>
-        <label>결제방식 <input name="method" placeholder="선택" /></label>
+        <label>메모 <input name="memo" placeholder="예: 목장모임 준비" /></label>
+        <input type="hidden" name="method" />
         <label>금액 <input name="amount" type="number" min="0" /></label>
         <label>거래일시 <input name="occurred_at" type="datetime-local" /></label>
         <label>누적/잔액 라벨 <input name="balance_label" placeholder="선택" /></label>
@@ -264,9 +280,50 @@ function renderPreviewCard(p) {
   `;
 }
 
+// ---- duplicate check ----
+async function checkDuplicateTx(occurredAt, excludeId) {
+  if (!occurredAt) return { exists: false, matches: [] };
+  const qs = new URLSearchParams({ occurred_at: occurredAt });
+  if (excludeId) qs.set("exclude_id", excludeId);
+  try {
+    return await apiGet(`/api/transactions/check-duplicate?${qs}`);
+  } catch {
+    return { exists: false, matches: [] };
+  }
+}
+
+function confirmDuplicateOverride(matches) {
+  const m = matches[0];
+  return confirm(
+    `같은 날짜·시간에 이미 등록된 거래가 있습니다.\n${m.card_company} · ${m.merchant} · ${money(m.amount)}\n\n그래도 저장할까요?`
+  );
+}
+
 // ---- refresh ----
+function applyPresetToDates(days) {
+  const fromInput = document.getElementById("period-from");
+  const toInput = document.getElementById("period-to");
+  const to = new Date();
+  const from = new Date(to.getTime() - Number(days) * 24 * 60 * 60 * 1000);
+  toInput.value = to.toISOString().slice(0, 10);
+  fromInput.value = from.toISOString().slice(0, 10);
+}
+
+function getPeriodQuery() {
+  const fromVal = document.getElementById("period-from").value;
+  const toVal = document.getElementById("period-to").value;
+  if (!fromVal || !toVal) return "";
+  const qs = new URLSearchParams({
+    from: new Date(`${fromVal}T00:00:00+09:00`).toISOString(),
+    to: new Date(`${toVal}T23:59:59+09:00`).toISOString(),
+  });
+  return `?${qs}`;
+}
+
 async function refreshAll() {
-  const [summary, list] = await Promise.all([apiGet("/api/summary"), apiGet("/api/transactions")]);
+  const query = getPeriodQuery();
+  const [summary, list] = await Promise.all([apiGet(`/api/summary${query}`), apiGet(`/api/transactions${query}`)]);
+  lastTransactions = list;
   renderSummary(summary);
   renderCards(list);
 }
@@ -283,6 +340,11 @@ document.getElementById("parse-btn").addEventListener("click", async () => {
   }
 });
 
+document.getElementById("clear-sms-btn").addEventListener("click", () => {
+  document.getElementById("sms-input").value = "";
+  document.getElementById("preview-list").innerHTML = "";
+});
+
 document.getElementById("preview-list").addEventListener("click", async (e) => {
   const btn = e.target.closest('[data-action="save-preview"]');
   if (!btn) return;
@@ -295,6 +357,11 @@ document.getElementById("preview-list").addEventListener("click", async (e) => {
 
   btn.disabled = true;
   try {
+    const dup = await checkDuplicateTx(body.occurred_at);
+    if (dup.exists && !confirmDuplicateOverride(dup.matches)) {
+      btn.disabled = false;
+      return;
+    }
     await apiPost("/api/transactions", body);
     card.remove();
     showToast("거래를 저장했습니다.");
@@ -306,6 +373,38 @@ document.getElementById("preview-list").addEventListener("click", async (e) => {
 });
 
 document.getElementById("cards").addEventListener("click", async (e) => {
+  const registerBtn = e.target.closest('[data-action="register-receipt"]');
+  if (registerBtn) {
+    if (uploadingTxId) return showToast("다른 영수증을 등록하는 중입니다. 잠시 후 다시 시도하세요.", true);
+    uploadingTxId = registerBtn.dataset.txId;
+    const fileInput = document.getElementById("receipt-file-input");
+    fileInput.click();
+    // 파일 선택 창을 취소하면 change 이벤트가 발생하지 않으므로,
+    // 창이 닫혀 포커스가 돌아왔는데도 파일이 선택되지 않았다면 잠금을 풀어준다.
+    window.addEventListener(
+      "focus",
+      () => {
+        setTimeout(() => {
+          if (fileInput.files.length === 0) uploadingTxId = null;
+        }, 500);
+      },
+      { once: true }
+    );
+    return;
+  }
+
+  const viewBtn = e.target.closest('[data-action="view-receipt"]');
+  if (viewBtn) {
+    const txId = viewBtn.dataset.txId;
+    try {
+      const { image } = await apiGet(`/api/transactions/${txId}/receipt-image`);
+      openReceiptModal(image, txId);
+    } catch (err) {
+      showToast(err.message, true);
+    }
+    return;
+  }
+
   const toggle = e.target.closest('[data-action="toggle"]');
   if (toggle) {
     const li = toggle.closest(".tx");
@@ -332,21 +431,9 @@ document.getElementById("cards").addEventListener("click", async (e) => {
     return;
   }
 
-  const delItem = e.target.closest('[data-action="delete-item"]');
-  if (delItem) {
-    if (!confirm("이 항목을 삭제할까요?")) return;
-    try {
-      await apiDelete(`/api/items/${delItem.dataset.itemId}`);
-      await refreshAll();
-    } catch (err) {
-      showToast(err.message, true);
-    }
-    return;
-  }
-
   const delTx = e.target.closest('[data-action="delete-tx"]');
   if (delTx) {
-    if (!confirm("이 거래를 삭제할까요? 영수증 항목도 함께 삭제됩니다.")) return;
+    if (!confirm("이 거래를 삭제할까요?")) return;
     try {
       await apiDelete(`/api/transactions/${delTx.dataset.txId}`);
       showToast("거래를 삭제했습니다.");
@@ -359,22 +446,6 @@ document.getElementById("cards").addEventListener("click", async (e) => {
 });
 
 document.getElementById("cards").addEventListener("submit", async (e) => {
-  const addItemForm = e.target.closest('[data-action="add-item"]');
-  if (addItemForm) {
-    e.preventDefault();
-    const fd = new FormData(addItemForm);
-    const body = { name: fd.get("name"), price: Number(fd.get("price")), qty: Number(fd.get("qty") || 1) };
-    try {
-      await apiPost(`/api/transactions/${addItemForm.dataset.txId}/items`, body);
-      openIds.add(addItemForm.dataset.txId);
-      showToast("영수증 항목을 추가했습니다.");
-      await refreshAll();
-    } catch (err) {
-      showToast(err.message, true);
-    }
-    return;
-  }
-
   const editForm = e.target.closest('[data-action="save-edit"]');
   if (editForm) {
     e.preventDefault();
@@ -384,6 +455,8 @@ document.getElementById("cards").addEventListener("submit", async (e) => {
     body.amount = Number(body.amount);
     body.balance_amount = body.balance_amount ? Number(body.balance_amount) : null;
     try {
+      const dup = await checkDuplicateTx(body.occurred_at, editForm.dataset.txId);
+      if (dup.exists && !confirmDuplicateOverride(dup.matches)) return;
       await apiPatch(`/api/transactions/${editForm.dataset.txId}`, body);
       openIds.add(editForm.dataset.txId);
       showToast("거래 정보를 수정했습니다.");
@@ -400,4 +473,59 @@ document.getElementById("logout-btn").addEventListener("click", async () => {
   location.href = "/login.html";
 });
 
+document.getElementById("period-select").addEventListener("change", () => {
+  applyPresetToDates(document.getElementById("period-select").value);
+  refreshAll().catch((err) => showToast(err.message, true));
+});
+
+document.getElementById("period-from").addEventListener("change", () => {
+  refreshAll().catch((err) => showToast(err.message, true));
+});
+document.getElementById("period-to").addEventListener("change", () => {
+  refreshAll().catch((err) => showToast(err.message, true));
+});
+
+document.getElementById("receipt-file-input").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  const txId = uploadingTxId;
+  if (!file || !txId) {
+    uploadingTxId = null;
+    return;
+  }
+  openIds.add(txId);
+  showToast("영수증 이미지를 등록하는 중입니다…");
+  try {
+    const dataUrl = await compressImageToDataUrl(file);
+    await apiPut(`/api/transactions/${txId}/receipt-image`, { image: dataUrl });
+    showToast("영수증 이미지를 등록했습니다.");
+    await refreshAll();
+  } catch (err) {
+    showToast(err.message || "영수증 이미지 등록에 실패했습니다.", true);
+  } finally {
+    uploadingTxId = null;
+  }
+});
+
+document.getElementById("receipt-modal").addEventListener("click", async (e) => {
+  if (e.target.closest('[data-action="close-receipt-modal"]')) {
+    closeReceiptModal();
+    return;
+  }
+  const delBtn = e.target.closest('[data-action="delete-receipt-image"]');
+  if (delBtn) {
+    if (!confirm("등록된 영수증 이미지를 삭제할까요?")) return;
+    const txId = document.getElementById("receipt-modal").dataset.txId;
+    try {
+      await apiDelete(`/api/transactions/${txId}/receipt-image`);
+      closeReceiptModal();
+      showToast("영수증 이미지를 삭제했습니다.");
+      await refreshAll();
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  }
+});
+
+applyPresetToDates(document.getElementById("period-select").value);
 refreshAll().catch((err) => showToast(err.message, true));

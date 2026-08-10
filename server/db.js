@@ -26,17 +26,10 @@ CREATE TABLE IF NOT EXISTS transactions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS receipt_items (
-  id SERIAL PRIMARY KEY,
-  transaction_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  price INTEGER NOT NULL,
-  qty INTEGER NOT NULL DEFAULT 1,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
 CREATE INDEX IF NOT EXISTS idx_transactions_occurred_at ON transactions (occurred_at DESC);
-CREATE INDEX IF NOT EXISTS idx_receipt_items_transaction_id ON receipt_items (transaction_id);
+
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS receipt_image TEXT;
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS memo TEXT;
 `;
 
 async function initSchema() {

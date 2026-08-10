@@ -3,13 +3,21 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>가계부 로그인</title>
+<title>재윤이네 가계부 로그인</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Crect x='1' y='1' width='22' height='22' rx='6' fill='%232e6b52'/%3E%3Crect x='5' y='7' width='14' height='10' rx='2' stroke='%23ffffff' stroke-width='1.6'/%3E%3Ccircle cx='12' cy='12' r='2.2' stroke='%23ffffff' stroke-width='1.6'/%3E%3C/svg%3E" />
 <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <div class="login-wrap">
     <form class="login-box" id="login-form">
-      <h1>가계부</h1>
+      <div class="brand-icon" aria-hidden="true" style="margin-bottom:14px;">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M9 4h6l1.6 3.2H7.4L9 4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+          <path d="M7 7.2h10l-1 10.6a2 2 0 0 1-2 1.8h-4a2 2 0 0 1-2-1.8L7 7.2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+          <path d="M12 9.5v6M10.3 11.3h3.4M10.3 13.7h3.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+        </svg>
+      </div>
+      <h1>재윤이네 가계부</h1>
       <p>비밀번호를 입력하면 접속할 수 있어요.</p>
       <input type="password" id="password" placeholder="비밀번호" autocomplete="current-password" autofocus />
       <p class="login-error" id="login-error"></p>

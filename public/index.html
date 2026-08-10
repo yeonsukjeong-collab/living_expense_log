@@ -3,34 +3,82 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>가계부 · 신용카드 사용 내역</title>
+<title>재윤이네 가계부 · 신용카드 사용 내역</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Crect x='1' y='1' width='22' height='22' rx='6' fill='%232e6b52'/%3E%3Crect x='5' y='7' width='14' height='10' rx='2' stroke='%23ffffff' stroke-width='1.6'/%3E%3Ccircle cx='12' cy='12' r='2.2' stroke='%23ffffff' stroke-width='1.6'/%3E%3C/svg%3E" />
 <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <div class="page">
-    <header class="top">
-      <div>
-        <p class="eyebrow">가계부 · 신용카드 사용 내역</p>
-        <h1>내 가계부</h1>
-        <p class="meta" id="meta-line">불러오는 중…</p>
+    <header class="top hero">
+      <div class="hero-decor" aria-hidden="true">
+        <svg class="decor decor-coin1" viewBox="0 0 24 24" width="26" height="26">
+          <circle cx="12" cy="12" r="10" fill="#ffd873" stroke="#e8b93f" stroke-width="1.4" />
+          <text x="12" y="16.5" font-size="11" text-anchor="middle" fill="#c9931f" font-weight="700">₩</text>
+        </svg>
+        <svg class="decor decor-coin2" viewBox="0 0 24 24" width="18" height="18">
+          <circle cx="12" cy="12" r="10" fill="#ffe6a3" stroke="#e8b93f" stroke-width="1.4" />
+          <text x="12" y="16.5" font-size="11" text-anchor="middle" fill="#c9931f" font-weight="700">$</text>
+        </svg>
+        <svg class="decor decor-sparkle1" viewBox="0 0 24 24" width="18" height="18">
+          <path d="M12 2l1.8 7.2L21 11l-7.2 1.8L12 20l-1.8-7.2L3 11l7.2-1.8L12 2Z" fill="#6fbe97" />
+        </svg>
+        <svg class="decor decor-sparkle2" viewBox="0 0 24 24" width="14" height="14">
+          <path d="M12 2l1.8 7.2L21 11l-7.2 1.8L12 20l-1.8-7.2L3 11l7.2-1.8L12 2Z" fill="#ff9d7a" />
+        </svg>
+        <svg class="decor decor-house" viewBox="0 0 24 24" width="30" height="30">
+          <path d="M4 11 12 4l8 7" stroke="#22314a" stroke-opacity="0.35" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+          <path d="M6.5 10v9h11v-9" stroke="#22314a" stroke-opacity="0.35" stroke-width="1.7" fill="none" stroke-linejoin="round" />
+          <path d="M10 19v-5h4v5" stroke="#22314a" stroke-opacity="0.35" stroke-width="1.7" fill="none" stroke-linejoin="round" />
+        </svg>
+        <svg class="decor decor-piggy" viewBox="0 0 24 24" width="30" height="30">
+          <ellipse cx="11" cy="13" rx="8" ry="6" fill="#ffb6c9" stroke="#e88fa8" stroke-width="1.2" />
+          <circle cx="4.5" cy="10.5" r="2.3" fill="#ffb6c9" stroke="#e88fa8" stroke-width="1.2" />
+          <circle cx="16" cy="9" r="0.9" fill="#a8607a" />
+          <path d="M11 6.5V4.5M15 7l1.4-1.6" stroke="#e88fa8" stroke-width="1.2" stroke-linecap="round" />
+          <rect x="9.5" y="7.2" width="3" height="0.9" rx="0.45" fill="#a8607a" />
+        </svg>
       </div>
-      <div style="display:flex; gap:8px;">
-        <a class="btn btn-sm" href="/api/export" download>내보내기</a>
-        <button class="btn btn-sm" id="logout-btn">로그아웃</button>
+      <div class="brand">
+        <div class="brand-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M9 4h6l1.6 3.2H7.4L9 4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+            <path d="M7 7.2h10l-1 10.6a2 2 0 0 1-2 1.8h-4a2 2 0 0 1-2-1.8L7 7.2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+            <path d="M12 9.5v6M10.3 11.3h3.4M10.3 13.7h3.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+          </svg>
+        </div>
+        <h1>재윤이네 가계부</h1>
+      </div>
+      <div class="header-actions">
+        <a class="btn-pill" href="/api/export" download>내보내기</a>
+        <button class="btn-pill" id="logout-btn">로그아웃</button>
       </div>
     </header>
 
     <section class="panel">
       <h2>카드 문자 붙여넣기</h2>
-      <p class="hint">문자 하나 또는 여러 개를 그대로 붙여넣으세요. KB국민카드 · 현대카드 · 신한카드(체크) 형식을 자동으로 인식합니다.</p>
       <textarea class="sms-input" id="sms-input" placeholder="예)&#10;KB국민카드9046&#10;승인&#10;91,820 원(일시불)&#10;(주)세계로유통 수지&#10;고객명 정*석님&#10;승인시각 08/07 12:02&#10;누적 767,844원"></textarea>
       <div class="panel-actions">
+        <button class="btn btn-ghost" id="clear-sms-btn">지우기</button>
         <button class="btn btn-primary" id="parse-btn">파싱하기</button>
       </div>
       <div class="preview-list" id="preview-list"></div>
     </section>
 
     <section class="panel">
+      <div class="period-row">
+        <label for="period-select">표시 기간</label>
+        <select id="period-select">
+          <option value="7" selected>최근 1주일</option>
+          <option value="14">최근 2주일</option>
+          <option value="30">최근 1개월</option>
+          <option value="90">최근 3개월</option>
+        </select>
+      </div>
+      <div class="period-custom" id="period-custom">
+        <input type="date" id="period-from" />
+        <span>~</span>
+        <input type="date" id="period-to" />
+      </div>
       <div class="stat-row">
         <div class="stat total">
           <span class="label">총 지출</span>
@@ -39,10 +87,6 @@
         <div class="stat">
           <span class="label">건수</span>
           <span class="value num" id="stat-count">0건</span>
-        </div>
-        <div class="stat">
-          <span class="label">기간</span>
-          <span class="value num" id="stat-range">-</span>
         </div>
       </div>
       <p class="breakdown-label">카드사별 사용 비중</p>
@@ -53,11 +97,24 @@
     <section class="cards" id="cards"></section>
 
     <footer class="note">
-      <p>영수증이 있는 거래는 항목을 눌러 펼친 뒤 상세 항목을 추가할 수 있습니다. 무료 DB 플랜을 쓰는 경우 데이터가 만료될 수 있으니 <a href="/api/export" download>내보내기</a>로 주기적으로 백업하세요.</p>
+      <p>거래를 눌러 펼치면 영수증 사진을 등록하거나 거래 정보를 수정할 수 있습니다. 무료 DB 플랜을 쓰는 경우 데이터가 만료될 수 있으니 <a href="/api/export" download>내보내기</a>로 주기적으로 백업하세요.</p>
     </footer>
   </div>
 
   <div class="toast" id="toast"></div>
+
+  <input type="file" id="receipt-file-input" accept="image/*" style="display:none" />
+
+  <div class="modal" id="receipt-modal">
+    <div class="modal-backdrop" data-action="close-receipt-modal"></div>
+    <div class="modal-content">
+      <img id="receipt-modal-img" alt="영수증 이미지" />
+      <div class="modal-actions">
+        <button type="button" class="btn btn-sm btn-danger" data-action="delete-receipt-image">삭제</button>
+        <button type="button" class="btn btn-sm" data-action="close-receipt-modal">닫기</button>
+      </div>
+    </div>
+  </div>
 
   <script src="/app.js"></script>
 </body>
