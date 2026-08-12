@@ -8,6 +8,10 @@ const { pool, initSchema } = require("./db");
 const { checkPassword, issueSession, clearSession, requireAuth } = require("./auth");
 const { parseAll } = require("./parse");
 
+// 방어선이 뚫려 처리되지 않은 예외가 올라오더라도 서버 프로세스 전체가 죽지 않게 한다.
+process.on("unhandledRejection", (err) => console.error("Unhandled rejection:", err));
+process.on("uncaughtException", (err) => console.error("Uncaught exception:", err));
+
 const app = express();
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
 
@@ -42,6 +46,16 @@ app.get(["/", "/index.html"], requireAuth, (req, res) => {
 const api = express.Router();
 api.use(requireAuth);
 
+// 라우트 핸들러에서 발생한 에러(잘못된 DB 입력 등)가 프로세스 전체를 죽이지 않도록 감싼다.
+function asyncHandler(fn) {
+  return (req, res, next) => {
+    Promise.resolve(fn(req, res, next)).catch((err) => {
+      console.error(err);
+      if (!res.headersSent) res.status(400).json({ error: "요청을 처리하지 못했습니다." });
+    });
+  };
+}
+
 function dateRangeClause(req, column) {
   const conditions = [];
   const params = [];
@@ -56,7 +70,7 @@ function dateRangeClause(req, column) {
   return { where: conditions.length ? `WHERE ${conditions.join(" AND ")}` : "", params };
 }
 
-api.get("/summary", async (req, res) => {
+api.get("/summary", asyncHandler(async (req, res) => {
   const { where, params } = dateRangeClause(req, "occurred_at");
   const totals = await pool.query(
     `SELECT COUNT(*)::int AS count,
@@ -74,7 +88,7 @@ api.get("/summary", async (req, res) => {
     params
   );
   res.json({ ...totals.rows[0], byCard: byCard.rows });
-});
+}));
 
 function transactionsSql(whereClause = "") {
   return `
@@ -91,15 +105,15 @@ function shapeTx(row) {
   return { ...rest, has_receipt_image: receipt_image != null };
 }
 
-api.get("/transactions", async (req, res) => {
+api.get("/transactions", asyncHandler(async (req, res) => {
   const { where, params } = dateRangeClause(req, "occurred_at");
   const { rows } = await pool.query(`${transactionsSql(where)} ORDER BY occurred_at DESC, id DESC`, params);
   res.json(rows);
-});
+}));
 
-api.get("/transactions/check-duplicate", async (req, res) => {
+api.get("/transactions/check-duplicate", asyncHandler(async (req, res) => {
   const { occurred_at, exclude_id } = req.query;
-  if (!occurred_at || Number.isNaN(Date.parse(occurred_at))) {
+  if (!occurred_at || Number.isNaN(Date.parse(occurred_at)) || !/^\d+$/.test(String(exclude_id ?? "0"))) {
     return res.json({ exists: false, matches: [] });
   }
   const params = [occurred_at];
@@ -113,7 +127,7 @@ api.get("/transactions/check-duplicate", async (req, res) => {
     params
   );
   res.json({ exists: rows.length > 0, matches: rows });
-});
+}));
 
 api.post("/parse", (req, res) => {
   const text = req.body && req.body.text;
@@ -133,7 +147,7 @@ function validateTxBody(body) {
   return errors;
 }
 
-api.post("/transactions", async (req, res) => {
+api.post("/transactions", asyncHandler(async (req, res) => {
   const body = req.body || {};
   const errors = validateTxBody(body);
   if (errors.length) return res.status(400).json({ error: errors.join(" ") });
@@ -157,9 +171,18 @@ api.post("/transactions", async (req, res) => {
     ]
   );
   res.status(201).json(shapeTx(rows[0]));
-});
+}));
 
-api.patch("/transactions/:id", async (req, res) => {
+function requireNumericId(req, res) {
+  if (!/^\d+$/.test(String(req.params.id))) {
+    res.status(400).json({ error: "잘못된 거래 ID입니다." });
+    return false;
+  }
+  return true;
+}
+
+api.patch("/transactions/:id", asyncHandler(async (req, res) => {
+  if (!requireNumericId(req, res)) return;
   const body = req.body || {};
   const errors = validateTxBody(body);
   if (errors.length) return res.status(400).json({ error: errors.join(" ") });
@@ -185,23 +208,26 @@ api.patch("/transactions/:id", async (req, res) => {
   );
   if (!rows.length) return res.status(404).json({ error: "거래를 찾을 수 없습니다." });
   res.json(shapeTx(rows[0]));
-});
+}));
 
-api.delete("/transactions/:id", async (req, res) => {
+api.delete("/transactions/:id", asyncHandler(async (req, res) => {
+  if (!requireNumericId(req, res)) return;
   const { rowCount } = await pool.query("DELETE FROM transactions WHERE id=$1", [req.params.id]);
   if (!rowCount) return res.status(404).json({ error: "거래를 찾을 수 없습니다." });
   res.status(204).end();
-});
+}));
 
-api.get("/transactions/:id/receipt-image", async (req, res) => {
+api.get("/transactions/:id/receipt-image", asyncHandler(async (req, res) => {
+  if (!requireNumericId(req, res)) return;
   const { rows } = await pool.query("SELECT receipt_image FROM transactions WHERE id=$1", [req.params.id]);
   if (!rows.length || !rows[0].receipt_image) {
     return res.status(404).json({ error: "등록된 영수증 이미지가 없습니다." });
   }
   res.json({ image: rows[0].receipt_image });
-});
+}));
 
-api.put("/transactions/:id/receipt-image", async (req, res) => {
+api.put("/transactions/:id/receipt-image", asyncHandler(async (req, res) => {
+  if (!requireNumericId(req, res)) return;
   const image = req.body && req.body.image;
   if (!image || typeof image !== "string" || !image.startsWith("data:image/")) {
     return res.status(400).json({ error: "올바른 이미지 데이터가 아닙니다." });
@@ -209,19 +235,20 @@ api.put("/transactions/:id/receipt-image", async (req, res) => {
   const { rowCount } = await pool.query("UPDATE transactions SET receipt_image=$1 WHERE id=$2", [image, req.params.id]);
   if (!rowCount) return res.status(404).json({ error: "거래를 찾을 수 없습니다." });
   res.json({ ok: true });
-});
+}));
 
-api.delete("/transactions/:id/receipt-image", async (req, res) => {
+api.delete("/transactions/:id/receipt-image", asyncHandler(async (req, res) => {
+  if (!requireNumericId(req, res)) return;
   const { rowCount } = await pool.query("UPDATE transactions SET receipt_image=NULL WHERE id=$1", [req.params.id]);
   if (!rowCount) return res.status(404).json({ error: "거래를 찾을 수 없습니다." });
   res.status(204).end();
-});
+}));
 
-api.get("/export", async (req, res) => {
+api.get("/export", asyncHandler(async (req, res) => {
   const { rows } = await pool.query(`${transactionsSql()} ORDER BY occurred_at DESC`);
   res.setHeader("Content-Disposition", `attachment; filename="ledger-export-${Date.now()}.json"`);
   res.json(rows);
-});
+}));
 
 app.use("/api", api);
 

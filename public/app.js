@@ -3,6 +3,7 @@
 const openIds = new Set();
 let lastTransactions = [];
 let uploadingTxId = null;
+let filePickResolved = false;
 
 // ---- helpers ----
 function esc(str) {
@@ -190,10 +191,7 @@ function loadImageFromFile(file) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve(img);
-    };
+    img.onload = () => resolve({ img, url });
     img.onerror = () => {
       URL.revokeObjectURL(url);
       reject(new Error("이미지를 불러올 수 없습니다."));
@@ -202,14 +200,291 @@ function loadImageFromFile(file) {
   });
 }
 
-async function compressImageToDataUrl(file, maxDim = 1600, quality = 0.82) {
-  const img = await loadImageFromFile(file);
-  const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+// ---- crop modal ----
+let cropObjectUrl = null;
+
+function openCropModal(objectUrl) {
+  cropObjectUrl = objectUrl;
+  const imgEl = document.getElementById("crop-image");
+  imgEl.onload = initCropBox;
+  imgEl.src = objectUrl;
+  document.getElementById("crop-modal").classList.add("open");
+}
+
+function closeCropModal() {
+  document.getElementById("crop-modal").classList.remove("open");
+  document.getElementById("crop-image").removeAttribute("src");
+  if (cropObjectUrl) {
+    URL.revokeObjectURL(cropObjectUrl);
+    cropObjectUrl = null;
+  }
+}
+
+// 영수증(밝은 종이)이 배경보다 밝다고 가정하고, Otsu 임계값으로 이진화한 뒤
+// 가장 큰 밝은 영역의 경계 상자를 찾아 자동 크롭 영역으로 사용한다.
+function autoDetectReceiptBox(imgEl) {
+  const maxSample = 400;
+  const scale = Math.min(1, maxSample / Math.max(imgEl.naturalWidth, imgEl.naturalHeight));
+  const sw = Math.max(1, Math.round(imgEl.naturalWidth * scale));
+  const sh = Math.max(1, Math.round(imgEl.naturalHeight * scale));
+
   const canvas = document.createElement("canvas");
-  canvas.width = Math.round(img.width * scale);
-  canvas.height = Math.round(img.height * scale);
-  canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL("image/jpeg", quality);
+  canvas.width = sw;
+  canvas.height = sh;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(imgEl, 0, 0, sw, sh);
+
+  let data;
+  try {
+    data = ctx.getImageData(0, 0, sw, sh).data;
+  } catch {
+    return null;
+  }
+
+  const gray = new Uint8ClampedArray(sw * sh);
+  const hist = new Array(256).fill(0);
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+    const g = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+    gray[p] = g;
+    hist[g]++;
+  }
+
+  // Otsu's method: 클래스 간 분산이 최대가 되는 임계값을 찾는다.
+  // 분산이 여러 t에 걸쳐 동일한 최댓값(plateau)을 가질 수 있어, 그 구간의 중간값을 최종 임계값으로 쓴다.
+  const total = sw * sh;
+  let sum = 0;
+  for (let t = 0; t < 256; t++) sum += t * hist[t];
+  let sumB = 0,
+    wB = 0,
+    maxVar = -1,
+    plateauStart = 0,
+    plateauEnd = 0;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t];
+    if (wB === 0) continue;
+    const wF = total - wB;
+    if (wF === 0) break;
+    sumB += t * hist[t];
+    const mB = sumB / wB;
+    const mF = (sum - sumB) / wF;
+    const varBetween = wB * wF * (mB - mF) * (mB - mF);
+    if (varBetween > maxVar) {
+      maxVar = varBetween;
+      plateauStart = t;
+      plateauEnd = t;
+    } else if (varBetween === maxVar) {
+      plateauEnd = t;
+    }
+  }
+  const threshold = Math.round((plateauStart + plateauEnd) / 2);
+
+  const mask = new Uint8Array(sw * sh);
+  for (let p = 0; p < gray.length; p++) mask[p] = gray[p] >= threshold ? 1 : 0;
+
+  // 가장 큰 연결된 밝은 영역을 BFS로 찾는다.
+  const visited = new Uint8Array(sw * sh);
+  const stack = new Int32Array(sw * sh);
+  let best = null;
+  for (let start = 0; start < mask.length; start++) {
+    if (!mask[start] || visited[start]) continue;
+    let stackLen = 0;
+    stack[stackLen++] = start;
+    visited[start] = 1;
+    let minX = sw,
+      maxX = 0,
+      minY = sh,
+      maxY = 0,
+      count = 0;
+    while (stackLen > 0) {
+      const idx = stack[--stackLen];
+      const x = idx % sw;
+      const y = (idx / sw) | 0;
+      count++;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+      if (x > 0 && mask[idx - 1] && !visited[idx - 1]) {
+        visited[idx - 1] = 1;
+        stack[stackLen++] = idx - 1;
+      }
+      if (x < sw - 1 && mask[idx + 1] && !visited[idx + 1]) {
+        visited[idx + 1] = 1;
+        stack[stackLen++] = idx + 1;
+      }
+      if (y > 0 && mask[idx - sw] && !visited[idx - sw]) {
+        visited[idx - sw] = 1;
+        stack[stackLen++] = idx - sw;
+      }
+      if (y < sh - 1 && mask[idx + sw] && !visited[idx + sw]) {
+        visited[idx + sw] = 1;
+        stack[stackLen++] = idx + sw;
+      }
+    }
+    if (!best || count > best.count) best = { count, minX, maxX, minY, maxY };
+  }
+
+  if (!best) return null;
+  const boxArea = (best.maxX - best.minX) * (best.maxY - best.minY);
+  const totalArea = sw * sh;
+  // 너무 작으면(노이즈) 또는 화면 전체를 덮으면(구분 실패) 자동 인식을 포기한다.
+  if (boxArea < totalArea * 0.05 || boxArea > totalArea * 0.98) return null;
+
+  const padX = (best.maxX - best.minX) * 0.03;
+  const padY = (best.maxY - best.minY) * 0.03;
+  const minX = Math.max(0, best.minX - padX);
+  const minY = Math.max(0, best.minY - padY);
+  const maxX = Math.min(sw, best.maxX + padX);
+  const maxY = Math.min(sh, best.maxY + padY);
+
+  return {
+    left: minX / sw,
+    top: minY / sh,
+    width: (maxX - minX) / sw,
+    height: (maxY - minY) / sh,
+  };
+}
+
+function initCropBox() {
+  const imgEl = document.getElementById("crop-image");
+  const box = document.getElementById("crop-box");
+  const hint = document.getElementById("crop-hint");
+  const rect = imgEl.getBoundingClientRect();
+
+  let detected = null;
+  try {
+    detected = autoDetectReceiptBox(imgEl);
+  } catch (err) {
+    console.error("영수증 자동 인식 실패:", err);
+    detected = null;
+  }
+  const frac = detected || { left: 0.075, top: 0.075, width: 0.85, height: 0.85 };
+  hint.textContent = detected
+    ? "영수증 영역을 자동으로 인식했습니다. 필요하면 모서리를 끌어 조정하세요."
+    : "영수증 영역을 자동으로 인식하지 못했습니다. 모서리를 끌어 직접 맞춰주세요.";
+
+  Object.assign(box.style, {
+    left: `${frac.left * rect.width}px`,
+    top: `${frac.top * rect.height}px`,
+    width: `${frac.width * rect.width}px`,
+    height: `${frac.height * rect.height}px`,
+  });
+}
+
+(function setupCropBoxInteraction() {
+  const stage = document.getElementById("crop-stage");
+  const box = document.getElementById("crop-box");
+  let mode = null;
+  let startPointer = { x: 0, y: 0 };
+  let startBox = { left: 0, top: 0, width: 0, height: 0 };
+
+  function clamp(v, min, max) {
+    return Math.min(Math.max(v, min), max);
+  }
+
+  function beginDrag(e, dragMode) {
+    mode = dragMode;
+    startPointer = { x: e.clientX, y: e.clientY };
+    startBox = {
+      left: parseFloat(box.style.left) || 0,
+      top: parseFloat(box.style.top) || 0,
+      width: parseFloat(box.style.width) || 0,
+      height: parseFloat(box.style.height) || 0,
+    };
+    e.preventDefault();
+  }
+
+  box.addEventListener("pointerdown", (e) => {
+    if (e.target.classList.contains("crop-handle")) return;
+    beginDrag(e, "move");
+  });
+  box.querySelectorAll(".crop-handle").forEach((handle) => {
+    handle.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
+      beginDrag(e, handle.dataset.handle);
+    });
+  });
+
+  window.addEventListener("pointermove", (e) => {
+    if (!mode) return;
+    const dx = e.clientX - startPointer.x;
+    const dy = e.clientY - startPointer.y;
+    const stageW = stage.clientWidth;
+    const stageH = stage.clientHeight;
+    const minSize = 30;
+    let { left, top, width, height } = startBox;
+
+    if (mode === "move") {
+      left = clamp(startBox.left + dx, 0, Math.max(0, stageW - startBox.width));
+      top = clamp(startBox.top + dy, 0, Math.max(0, stageH - startBox.height));
+    } else {
+      if (mode.includes("e")) width = clamp(startBox.width + dx, minSize, stageW - startBox.left);
+      if (mode.includes("s")) height = clamp(startBox.height + dy, minSize, stageH - startBox.top);
+      if (mode.includes("w")) {
+        const newLeft = clamp(startBox.left + dx, 0, startBox.left + startBox.width - minSize);
+        width = startBox.width + (startBox.left - newLeft);
+        left = newLeft;
+      }
+      if (mode.includes("n")) {
+        const newTop = clamp(startBox.top + dy, 0, startBox.top + startBox.height - minSize);
+        height = startBox.height + (startBox.top - newTop);
+        top = newTop;
+      }
+    }
+
+    Object.assign(box.style, { left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px` });
+  });
+
+  window.addEventListener("pointerup", () => {
+    mode = null;
+  });
+})();
+
+async function performCropAndUpload(txId) {
+  if (!txId) {
+    closeCropModal();
+    showToast("등록할 거래를 찾지 못했습니다. 다시 시도해 주세요.", true);
+    return;
+  }
+  try {
+    const imgEl = document.getElementById("crop-image");
+    const box = document.getElementById("crop-box");
+    const displayRect = imgEl.getBoundingClientRect();
+    const boxRect = {
+      left: parseFloat(box.style.left) || 0,
+      top: parseFloat(box.style.top) || 0,
+      width: parseFloat(box.style.width) || 0,
+      height: parseFloat(box.style.height) || 0,
+    };
+    if (!imgEl.naturalWidth || !displayRect.width || !boxRect.width || !boxRect.height) {
+      throw new Error("자를 영역을 아직 준비하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    }
+    const scaleX = imgEl.naturalWidth / displayRect.width;
+    const scaleY = imgEl.naturalHeight / displayRect.height;
+    const sx = boxRect.left * scaleX;
+    const sy = boxRect.top * scaleY;
+    const sw = boxRect.width * scaleX;
+    const sh = boxRect.height * scaleY;
+
+    const maxDim = 1600;
+    const scale = Math.min(1, maxDim / Math.max(sw, sh));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(sw * scale));
+    canvas.height = Math.max(1, Math.round(sh * scale));
+    canvas.getContext("2d").drawImage(imgEl, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+
+    closeCropModal();
+    showToast("영수증 이미지를 등록하는 중입니다…");
+    await apiPut(`/api/transactions/${txId}/receipt-image`, { image: dataUrl });
+    showToast("영수증 이미지를 등록했습니다.");
+    await refreshAll();
+  } catch (err) {
+    closeCropModal();
+    showToast(err.message || "영수증 이미지 등록에 실패했습니다.", true);
+  } finally {
+    uploadingTxId = null;
+  }
 }
 
 function openReceiptModal(imageSrc, txId) {
@@ -377,19 +652,7 @@ document.getElementById("cards").addEventListener("click", async (e) => {
   if (registerBtn) {
     if (uploadingTxId) return showToast("다른 영수증을 등록하는 중입니다. 잠시 후 다시 시도하세요.", true);
     uploadingTxId = registerBtn.dataset.txId;
-    const fileInput = document.getElementById("receipt-file-input");
-    fileInput.click();
-    // 파일 선택 창을 취소하면 change 이벤트가 발생하지 않으므로,
-    // 창이 닫혀 포커스가 돌아왔는데도 파일이 선택되지 않았다면 잠금을 풀어준다.
-    window.addEventListener(
-      "focus",
-      () => {
-        setTimeout(() => {
-          if (fileInput.files.length === 0) uploadingTxId = null;
-        }, 500);
-      },
-      { once: true }
-    );
+    document.getElementById("receipt-choice-modal").classList.add("open");
     return;
   }
 
@@ -485,7 +748,45 @@ document.getElementById("period-to").addEventListener("change", () => {
   refreshAll().catch((err) => showToast(err.message, true));
 });
 
+document.getElementById("receipt-choice-modal").addEventListener("click", (e) => {
+  const closeBtn = e.target.closest('[data-action="close-receipt-choice"]');
+  if (closeBtn) {
+    document.getElementById("receipt-choice-modal").classList.remove("open");
+    uploadingTxId = null;
+    return;
+  }
+
+  const cameraBtn = e.target.closest('[data-action="choose-camera"]');
+  const galleryBtn = e.target.closest('[data-action="choose-gallery"]');
+  if (!cameraBtn && !galleryBtn) return;
+
+  document.getElementById("receipt-choice-modal").classList.remove("open");
+  const fileInput = document.getElementById("receipt-file-input");
+  if (cameraBtn) fileInput.setAttribute("capture", "environment");
+  else fileInput.removeAttribute("capture");
+
+  filePickResolved = false;
+  fileInput.click();
+
+  // 파일 선택을 취소했을 때 잠금을 풀기 위한 두 가지 안전장치.
+  // "window focus" 시점은 모바일 브라우저에서 신뢰할 수 없어(사진을 실제로 골라도
+  // 너무 이르게 발생하는 경우가 있음) 더 이상 사용하지 않는다.
+  // 1) 취소를 지원하는 브라우저는 표준 'cancel' 이벤트로 즉시 감지한다.
+  fileInput.addEventListener(
+    "cancel",
+    () => {
+      if (!filePickResolved) uploadingTxId = null;
+    },
+    { once: true }
+  );
+  // 2) 'cancel' 이벤트를 지원하지 않는 브라우저를 위한 넉넉한 최후의 안전장치.
+  setTimeout(() => {
+    if (!filePickResolved) uploadingTxId = null;
+  }, 60000);
+});
+
 document.getElementById("receipt-file-input").addEventListener("change", async (e) => {
+  filePickResolved = true;
   const file = e.target.files[0];
   e.target.value = "";
   const txId = uploadingTxId;
@@ -494,16 +795,23 @@ document.getElementById("receipt-file-input").addEventListener("change", async (
     return;
   }
   openIds.add(txId);
-  showToast("영수증 이미지를 등록하는 중입니다…");
   try {
-    const dataUrl = await compressImageToDataUrl(file);
-    await apiPut(`/api/transactions/${txId}/receipt-image`, { image: dataUrl });
-    showToast("영수증 이미지를 등록했습니다.");
-    await refreshAll();
+    const { url } = await loadImageFromFile(file);
+    openCropModal(url);
   } catch (err) {
-    showToast(err.message || "영수증 이미지 등록에 실패했습니다.", true);
-  } finally {
     uploadingTxId = null;
+    showToast(err.message || "이미지를 불러오지 못했습니다.", true);
+  }
+});
+
+document.getElementById("crop-modal").addEventListener("click", (e) => {
+  if (e.target.closest('[data-action="cancel-crop"]')) {
+    closeCropModal();
+    uploadingTxId = null;
+    return;
+  }
+  if (e.target.closest('[data-action="confirm-crop"]')) {
+    performCropAndUpload(uploadingTxId);
   }
 });
 

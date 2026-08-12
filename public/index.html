@@ -105,6 +105,36 @@
 
   <input type="file" id="receipt-file-input" accept="image/*" style="display:none" />
 
+  <div class="modal" id="receipt-choice-modal">
+    <div class="modal-backdrop" data-action="close-receipt-choice"></div>
+    <div class="modal-content receipt-choice-content">
+      <p class="hint" style="margin:0">영수증 사진을 어떻게 등록할까요?</p>
+      <button type="button" class="btn btn-primary" data-action="choose-camera">📷 카메라로 촬영</button>
+      <button type="button" class="btn" data-action="choose-gallery">🖼 앨범에서 선택</button>
+      <button type="button" class="btn btn-ghost btn-sm" data-action="close-receipt-choice">취소</button>
+    </div>
+  </div>
+
+  <div class="modal" id="crop-modal">
+    <div class="modal-backdrop" data-action="cancel-crop"></div>
+    <div class="modal-content crop-modal-content">
+      <p class="hint" id="crop-hint" style="margin:0 0 6px">영수증 영역을 인식하는 중…</p>
+      <div class="crop-stage" id="crop-stage">
+        <img id="crop-image" alt="영수증 원본" draggable="false" />
+        <div class="crop-box" id="crop-box">
+          <div class="crop-handle" data-handle="nw"></div>
+          <div class="crop-handle" data-handle="ne"></div>
+          <div class="crop-handle" data-handle="sw"></div>
+          <div class="crop-handle" data-handle="se"></div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-sm btn-ghost" data-action="cancel-crop">취소</button>
+        <button type="button" class="btn btn-sm btn-primary" data-action="confirm-crop">이 영역으로 등록</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal" id="receipt-modal">
     <div class="modal-backdrop" data-action="close-receipt-modal"></div>
     <div class="modal-content">
