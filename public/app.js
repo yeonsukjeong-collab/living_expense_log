@@ -503,35 +503,13 @@ function closeReceiptModal() {
 // ---- preview (parse) ----
 let previewSeq = 0;
 
-function renderPreview(results) {
+function renderPreview(failedResults) {
   const root = document.getElementById("preview-list");
-  root.innerHTML = results.map(renderPreviewCard).join("");
+  root.innerHTML = failedResults.map(renderManualEntryCard).join("");
 }
 
-function renderPreviewCard(p) {
+function renderManualEntryCard(p) {
   const localId = "p" + previewSeq++;
-  if (p.ok) {
-    const d = p.data;
-    return `
-      <div class="preview-card" data-local-id="${localId}">
-        <div class="field-grid">
-          <label>카드사 <input name="card_company" value="${esc(d.card_company)}" /></label>
-          <label>카드 표시 <input name="card_label" value="${esc(d.card_label || "")}" /></label>
-          <label>가맹점 <input name="merchant" value="${esc(d.merchant)}" /></label>
-          <label>메모 <input name="memo" placeholder="예: 목장모임 준비" /></label>
-          <input type="hidden" name="method" value="${esc(d.method || "")}" />
-          <label>금액 <input name="amount" type="number" min="0" value="${d.amount}" /></label>
-          <label>거래일시 <input name="occurred_at" type="datetime-local" value="${toKstInputValue(d.occurred_at)}" /></label>
-          <label>누적/잔액 라벨 <input name="balance_label" value="${esc(d.balance_label || "")}" /></label>
-          <label>누적/잔액 금액 <input name="balance_amount" type="number" min="0" value="${d.balance_amount ?? ""}" /></label>
-        </div>
-        <div class="preview-actions">
-          <span class="chip filled">인식됨</span>
-          <button class="btn btn-primary btn-sm" data-action="save-preview">저장</button>
-        </div>
-      </div>
-    `;
-  }
   return `
     <div class="preview-card failed" data-local-id="${localId}">
       <span class="chip">인식 실패 · 직접 입력해 주세요</span>
@@ -604,14 +582,44 @@ async function refreshAll() {
 }
 
 // ---- events ----
-document.getElementById("parse-btn").addEventListener("click", async () => {
-  const text = document.getElementById("sms-input").value;
+document.getElementById("save-sms-btn").addEventListener("click", async () => {
+  const textEl = document.getElementById("sms-input");
+  const text = textEl.value;
   if (!text.trim()) return showToast("문자 내용을 입력해 주세요.", true);
+
+  const btn = document.getElementById("save-sms-btn");
+  btn.disabled = true;
   try {
     const { results } = await apiPost("/api/parse", { text });
-    renderPreview(results);
+    const recognized = results.filter((r) => r.ok);
+    const failed = results.filter((r) => !r.ok);
+
+    let savedCount = 0;
+    for (const r of recognized) {
+      const dup = await checkDuplicateTx(r.data.occurred_at);
+      if (dup.exists && !confirmDuplicateOverride(dup.matches)) continue;
+      await apiPost("/api/transactions", r.data);
+      savedCount++;
+    }
+
+    renderPreview(failed);
+    if (savedCount) textEl.value = "";
+
+    if (savedCount && failed.length) {
+      showToast(`${savedCount}건 저장했습니다. ${failed.length}건은 인식하지 못해 아래에서 직접 입력해 주세요.`, true);
+    } else if (savedCount) {
+      showToast(`${savedCount}건 저장했습니다.`);
+    } else if (failed.length) {
+      showToast("인식하지 못했습니다. 아래에서 직접 입력해 주세요.", true);
+    } else {
+      showToast("저장할 내용이 없습니다.", true);
+    }
+
+    if (savedCount) await refreshAll();
   } catch (err) {
     showToast(err.message, true);
+  } finally {
+    btn.disabled = false;
   }
 });
 
