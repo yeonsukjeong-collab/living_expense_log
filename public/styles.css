@@ -424,6 +424,11 @@ textarea.sms-input:focus-visible { outline: 2px solid var(--accent); outline-off
   gap: 4px;
   flex: none;
 }
+/* 글자 크기를 키워도 영수증 버튼은 커지지 않게 고정해서 가맹점명 표시 폭을 지켜준다. */
+.badges .chip {
+  font-size: 11px;
+  padding: 3px 8px;
+}
 
 .modal {
   display: none;

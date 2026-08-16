@@ -142,8 +142,8 @@ function renderTxRow(t) {
           <span class="badges">
             ${
               t.has_receipt_image
-                ? `<button type="button" class="chip filled chip-btn" data-action="view-receipt" data-tx-id="${t.id}">영수증 사진</button>`
-                : `<button type="button" class="chip chip-btn" data-action="register-receipt" data-tx-id="${t.id}">영수증 사진 등록</button>`
+                ? `<button type="button" class="chip filled chip-btn" data-action="view-receipt" data-tx-id="${t.id}">영수증</button>`
+                : `<button type="button" class="chip chip-btn" data-action="register-receipt" data-tx-id="${t.id}">영수증 등록</button>`
             }
           </span>
           <span class="tx-amount num">${money(t.amount)}</span>
