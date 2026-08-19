@@ -77,7 +77,6 @@ const apiDelete = (url) => apiFetch(url, { method: "DELETE" });
 // ---- summary ----
 function renderSummary(s) {
   document.getElementById("stat-total").textContent = money(s.total);
-  document.getElementById("stat-count").textContent = s.count + "건";
 
   const bar = document.getElementById("bar");
   const legend = document.getElementById("legend");
@@ -90,7 +89,7 @@ function renderSummary(s) {
     bar.insertAdjacentHTML("beforeend", `<div class="seg" style="width:${pct}%; background:var(--${key})"></div>`);
     legend.insertAdjacentHTML(
       "beforeend",
-      `<span class="legend-item"><span class="legend-dot" style="background:var(--${key})"></span>${esc(c.card_company)} <span class="num">${money(c.total)}</span> (${pct.toFixed(1)}%)</span>`
+      `<span class="legend-item"><span class="legend-dot" style="background:var(--${key})"></span>${esc(c.card_company)} <span class="num">${c.count}건 ${money(c.total)}</span> (${pct.toFixed(1)}%)</span>`
     );
   });
 }
