@@ -534,9 +534,9 @@ function renderManualEntryCard(p) {
 }
 
 // ---- duplicate check ----
-async function checkDuplicateTx(occurredAt, excludeId) {
+async function checkDuplicateTx(occurredAt, cardCompany, excludeId) {
   if (!occurredAt) return { exists: false, matches: [] };
-  const qs = new URLSearchParams({ occurred_at: occurredAt });
+  const qs = new URLSearchParams({ occurred_at: occurredAt, card_company: cardCompany || "" });
   if (excludeId) qs.set("exclude_id", excludeId);
   try {
     return await apiGet(`/api/transactions/check-duplicate?${qs}`);
@@ -596,7 +596,7 @@ document.getElementById("save-sms-btn").addEventListener("click", async () => {
 
     let savedCount = 0;
     for (const r of recognized) {
-      const dup = await checkDuplicateTx(r.data.occurred_at);
+      const dup = await checkDuplicateTx(r.data.occurred_at, r.data.card_company);
       if (dup.exists && !confirmDuplicateOverride(dup.matches)) continue;
       await apiPost("/api/transactions", r.data);
       savedCount++;
@@ -640,7 +640,7 @@ document.getElementById("preview-list").addEventListener("click", async (e) => {
 
   btn.disabled = true;
   try {
-    const dup = await checkDuplicateTx(body.occurred_at);
+    const dup = await checkDuplicateTx(body.occurred_at, body.card_company);
     if (dup.exists && !confirmDuplicateOverride(dup.matches)) {
       btn.disabled = false;
       return;
@@ -726,7 +726,7 @@ document.getElementById("cards").addEventListener("submit", async (e) => {
     body.amount = Number(body.amount);
     body.balance_amount = body.balance_amount ? Number(body.balance_amount) : null;
     try {
-      const dup = await checkDuplicateTx(body.occurred_at, editForm.dataset.txId);
+      const dup = await checkDuplicateTx(body.occurred_at, body.card_company, editForm.dataset.txId);
       if (dup.exists && !confirmDuplicateOverride(dup.matches)) return;
       await apiPatch(`/api/transactions/${editForm.dataset.txId}`, body);
       openIds.add(editForm.dataset.txId);

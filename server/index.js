@@ -112,12 +112,12 @@ api.get("/transactions", asyncHandler(async (req, res) => {
 }));
 
 api.get("/transactions/check-duplicate", asyncHandler(async (req, res) => {
-  const { occurred_at, exclude_id } = req.query;
+  const { occurred_at, card_company, exclude_id } = req.query;
   if (!occurred_at || Number.isNaN(Date.parse(occurred_at)) || !/^\d+$/.test(String(exclude_id ?? "0"))) {
     return res.json({ exists: false, matches: [] });
   }
-  const params = [occurred_at];
-  let where = "occurred_at = $1";
+  const params = [occurred_at, card_company || ""];
+  let where = "occurred_at = $1 AND card_company = $2";
   if (exclude_id) {
     params.push(exclude_id);
     where += ` AND id <> $${params.length}`;

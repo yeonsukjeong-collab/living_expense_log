@@ -16,6 +16,7 @@
   --hyundai: #eb6834;
   --shinhan: #1baf7a;
   --other: #8b9189;
+  --memo: #2a6fd6;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -37,6 +38,7 @@
     --hyundai: #d95926;
     --shinhan: #199e70;
     --other: #626b64;
+    --memo: #6ca4f2;
   }
 }
 
@@ -58,6 +60,7 @@
   --hyundai: #d95926;
   --shinhan: #199e70;
   --other: #626b64;
+  --memo: #6ca4f2;
 }
 
 :root[data-theme="light"] {
@@ -78,6 +81,7 @@
   --hyundai: #eb6834;
   --shinhan: #1baf7a;
   --other: #8b9189;
+  --memo: #2a6fd6;
 }
 
 * { box-sizing: border-box; }
@@ -362,7 +366,7 @@ textarea.sms-input:focus-visible { outline: 2px solid var(--accent); outline-off
 
 .tx-line2 { display: flex; align-items: baseline; gap: 12px; font-size: 0.78rem; color: var(--ink-muted); }
 .tx-line2 .tx-date { white-space: nowrap; }
-.tx-line2 .tx-memo { overflow-wrap: break-word; }
+.tx-line2 .tx-memo { overflow-wrap: break-word; font-weight: 700; color: var(--memo); }
 
 .chip {
   display: inline-block;
