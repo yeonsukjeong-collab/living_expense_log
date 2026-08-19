@@ -366,7 +366,7 @@ textarea.sms-input:focus-visible { outline: 2px solid var(--accent); outline-off
 
 .tx-line2 { display: flex; align-items: baseline; gap: 12px; font-size: 0.78rem; color: var(--ink-muted); }
 .tx-line2 .tx-date { white-space: nowrap; }
-.tx-line2 .tx-memo { overflow-wrap: break-word; font-weight: 700; color: var(--memo); }
+.tx-line2 .tx-memo { overflow-wrap: break-word; font-weight: 700; color: var(--memo); margin-left: auto; text-align: right; }
 
 .chip {
   display: inline-block;
