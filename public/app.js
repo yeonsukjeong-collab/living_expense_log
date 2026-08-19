@@ -124,7 +124,7 @@ function renderGroup(g) {
       <div class="card-head">
         <span class="dot" style="background:var(--${key})"></span>
         <h2>${esc(g.card_company)} ${labelBadge}</h2>
-        <span class="subtotal num">${money(g.subtotal)}</span>
+        <span class="subtotal num">${g.items.length}건 ${money(g.subtotal)}</span>
       </div>
       <ul class="tx-list">${g.items.map(renderTxRow).join("")}</ul>
     </article>
