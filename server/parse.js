@@ -98,14 +98,14 @@ function parseKb(text) {
 
 function parseHyundai(text) {
   const lines = getLines(text);
-  const headerIdx = lines.findIndex((l) => /^현대카드/.test(l));
+  const headerIdx = lines.findIndex((l) => /^현대(카드)?\s/.test(l));
   const amountIdx = lines.findIndex((l) => /^[\d,]+\s*원(\s|$)/.test(l));
   const dateIdx = lines.findIndex((l) => /^\d{2}\/\d{2}\s+\d{2}:\d{2}$/.test(l));
   const balanceIdx = lines.findIndex((l) => /(누적|잔액)\s*[\d,]+\s*원/.test(l));
 
   if (headerIdx === -1 || amountIdx === -1 || dateIdx === -1) return null;
 
-  const headerMatch = lines[headerIdx].match(/^현대카드\s*(.*?)\s*승인$/);
+  const headerMatch = lines[headerIdx].match(/^현대(?:카드)?\s*(.*?)\s*승인$/);
   const amountMatch = lines[amountIdx].match(/^([\d,]+)\s*원\s*([가-힣]*)$/);
   const dateMatch = lines[dateIdx].match(/^(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})$/);
   if (!amountMatch || !dateMatch) return null;
@@ -153,7 +153,7 @@ function parseMessage(text) {
     const r = parseKb(trimmed);
     if (r) return { ok: true, data: r };
   }
-  if (/현대카드/.test(trimmed)) {
+  if (/현대카드|^현대\s/m.test(trimmed)) {
     const r = parseHyundai(trimmed);
     if (r) return { ok: true, data: r };
   }
