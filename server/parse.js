@@ -141,6 +141,36 @@ function parseHyundai(text) {
   };
 }
 
+function parseHana(text) {
+  const lines = getLines(text);
+  const amountIdx = lines.findIndex((l) => /^금액\s+[\d,]+\s*원$/.test(l));
+  const cardIdx = lines.findIndex((l) => /^카드\s+(.+)$/.test(l));
+  const methodIdx = lines.findIndex((l) => /^거래종류\s+(.+)$/.test(l));
+  const merchantIdx = lines.findIndex((l) => /^사용처\s+(.+)$/.test(l));
+  const timeIdx = lines.findIndex((l) => /^거래시간\s+\d{2}\/\d{2}\s+\d{2}:\d{2}$/.test(l));
+
+  if (amountIdx === -1 || merchantIdx === -1 || timeIdx === -1) return null;
+
+  const amountMatch = lines[amountIdx].match(/^금액\s+([\d,]+)\s*원$/);
+  const cardMatch = cardIdx !== -1 ? lines[cardIdx].match(/^카드\s+(.+)$/) : null;
+  const methodMatch = methodIdx !== -1 ? lines[methodIdx].match(/^거래종류\s+(.+)$/) : null;
+  const merchantMatch = lines[merchantIdx].match(/^사용처\s+(.+)$/);
+  const timeMatch = lines[timeIdx].match(/^거래시간\s+(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})$/);
+  if (!amountMatch || !merchantMatch || !timeMatch) return null;
+
+  return {
+    card_company: "하나카드",
+    card_label: cardMatch ? cardMatch[1].trim() : null,
+    amount: toInt(amountMatch[1]),
+    method: methodMatch ? methodMatch[1].trim() : null,
+    merchant: merchantMatch[1].trim(),
+    occurred_at: toIsoKst(timeMatch[1], timeMatch[2], timeMatch[3], timeMatch[4]),
+    balance_label: null,
+    balance_amount: null,
+    raw_sms: text,
+  };
+}
+
 function parseMessage(text) {
   const trimmed = text.trim();
   if (!trimmed) return { ok: false, raw: text };
@@ -155,6 +185,10 @@ function parseMessage(text) {
   }
   if (/현대카드|^현대\s/m.test(trimmed)) {
     const r = parseHyundai(trimmed);
+    if (r) return { ok: true, data: r };
+  }
+  if (/하나카드|^카드\s+하나/m.test(trimmed)) {
+    const r = parseHana(trimmed);
     if (r) return { ok: true, data: r };
   }
   return { ok: false, raw: text };
