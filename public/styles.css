@@ -299,7 +299,16 @@ textarea.sms-input:focus-visible { outline: 2px solid var(--accent); outline-off
 .stat .value { display: block; font-size: 1.3rem; font-weight: 700; }
 .stat.total .value { color: var(--accent); }
 
-.breakdown-label { font-size: 0.78rem; color: var(--ink-muted); margin: 0 0 8px; }
+.breakdown-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.breakdown-label { font-size: 0.78rem; color: var(--ink-muted); margin: 0; }
+.breakdown-head select {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 0.82rem;
+  color: var(--ink);
+}
 
 .bar {
   display: flex;

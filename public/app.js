@@ -76,6 +76,21 @@ const apiPut = (url, body) => apiFetch(url, { method: "PUT", body: JSON.stringif
 const apiDelete = (url) => apiFetch(url, { method: "DELETE" });
 
 // ---- summary ----
+function populateCardFilter(byCard) {
+  const select = document.getElementById("card-filter");
+  const current = select.value;
+  const companies = byCard.map((c) => c.card_company);
+  select.innerHTML =
+    `<option value="">전체</option>` +
+    companies.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+  select.value = companies.includes(current) ? current : "";
+}
+
+function filterByCard(list) {
+  const val = document.getElementById("card-filter").value;
+  return val ? list.filter((t) => t.card_company === val) : list;
+}
+
 function renderSummary(s) {
   document.getElementById("stat-total").textContent = money(s.total);
 
@@ -83,6 +98,7 @@ function renderSummary(s) {
   const legend = document.getElementById("legend");
   bar.innerHTML = "";
   legend.innerHTML = "";
+  populateCardFilter(s.byCard);
   if (!s.total) return;
   s.byCard.forEach((c) => {
     const pct = (c.total / s.total) * 100;
@@ -578,7 +594,7 @@ async function refreshAll() {
   const [summary, list] = await Promise.all([apiGet(`/api/summary${query}`), apiGet(`/api/transactions${query}`)]);
   lastTransactions = list;
   renderSummary(summary);
-  renderCards(list);
+  renderCards(filterByCard(list));
 }
 
 // ---- events ----
@@ -754,6 +770,10 @@ document.getElementById("period-from").addEventListener("change", () => {
 });
 document.getElementById("period-to").addEventListener("change", () => {
   refreshAll().catch((err) => showToast(err.message, true));
+});
+
+document.getElementById("card-filter").addEventListener("change", () => {
+  renderCards(filterByCard(lastTransactions));
 });
 
 document.getElementById("receipt-choice-modal").addEventListener("click", (e) => {
