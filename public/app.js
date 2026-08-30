@@ -24,6 +24,7 @@ function cardKey(company) {
   if (company.includes("현대")) return "hyundai";
   if (company.includes("신한")) return "shinhan";
   if (company.includes("하나")) return "hana";
+  if (company.includes("컬리")) return "kurly";
   return "other";
 }
 

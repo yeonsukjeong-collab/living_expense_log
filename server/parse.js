@@ -13,22 +13,44 @@ function toIsoKst(mm, dd, hh, mi) {
   return `${year}-${mm}-${dd}T${hh}:${mi}:00+09:00`;
 }
 
+function splitByBlankLine(text) {
+  return text.split(/\n\s*\n+/).map((s) => s.trim()).filter(Boolean);
+}
+
+// 컬리 영수증은 항목 사이에 빈 줄이 섞여 있어 일반 빈 줄 분리 규칙으로 나누면 한 메시지가 조각난다.
+// "합계...원"까지를 컬리 메시지로 확정하고, 앞뒤에 다른 메시지가 붙어 있으면 마저 분리한다.
+function splitKurlyBlock(block) {
+  const endMatch = block.match(/합계\s*[\d,]+\s*원/);
+  if (!endMatch) return splitByBlankLine(block);
+  const cutAt = endMatch.index + endMatch[0].length;
+  const kurlyPart = block.slice(0, cutAt).trim();
+  const rest = block.slice(cutAt).trim();
+  return rest ? [kurlyPart, ...splitByBlankLine(rest)] : [kurlyPart];
+}
+
+function processBlock(block) {
+  const kurlyStart = block.search(/^발행정보\s*$/m);
+  if (kurlyStart === -1) return splitByBlankLine(block);
+  const before = block.slice(0, kurlyStart).trim();
+  const kurlyAndAfter = block.slice(kurlyStart);
+  return [...(before ? splitByBlankLine(before) : []), ...splitKurlyBlock(kurlyAndAfter)];
+}
+
 function splitMessages(text) {
   const normalized = String(text || "").replace(/\r\n/g, "\n").trim();
   if (!normalized) return [];
-  const startRe = /^\[Web발신\]\s*$|^KB국민카드\d|^\[신한.*승인\]/gm;
+  const startRe = /^\[Web발신\]\s*$|^KB국민카드\d|^\[신한.*승인\]|^발행정보\s*$/gm;
   const indices = [];
   let m;
   while ((m = startRe.exec(normalized))) indices.push(m.index);
-  if (indices.length <= 1) {
-    return normalized.split(/\n\s*\n+/).map((s) => s.trim()).filter(Boolean);
-  }
+
+  const rawBlocks =
+    indices.length <= 1
+      ? [normalized]
+      : indices.map((start, i) => normalized.slice(start, i + 1 < indices.length ? indices[i + 1] : normalized.length).trim());
+
   const blocks = [];
-  for (let i = 0; i < indices.length; i++) {
-    const start = indices[i];
-    const end = i + 1 < indices.length ? indices[i + 1] : normalized.length;
-    blocks.push(normalized.slice(start, end).trim());
-  }
+  for (const block of rawBlocks) blocks.push(...processBlock(block));
   return blocks;
 }
 
@@ -171,6 +193,27 @@ function parseHana(text) {
   };
 }
 
+function parseKurly(text) {
+  const compact = text.replace(/\r?\n/g, "");
+  const dateMatch = compact.match(/거래일(\d{4})\/(\d{2})\/(\d{2})/);
+  const amountMatch = compact.match(/합계\s*([\d,]+)\s*원/);
+  const productMatch = compact.match(/상품명(.+?)공급가액/);
+  if (!dateMatch || !amountMatch) return null;
+
+  const [, yyyy, mm, dd] = dateMatch;
+  return {
+    card_company: "컬리",
+    card_label: null,
+    amount: toInt(amountMatch[1]),
+    method: null,
+    merchant: productMatch ? productMatch[1].trim() : "컬리",
+    occurred_at: `${yyyy}-${mm}-${dd}T00:00:00+09:00`,
+    balance_label: null,
+    balance_amount: null,
+    raw_sms: text,
+  };
+}
+
 function parseMessage(text) {
   const trimmed = text.trim();
   if (!trimmed) return { ok: false, raw: text };
@@ -189,6 +232,10 @@ function parseMessage(text) {
   }
   if (/하나카드|^카드\s+하나/m.test(trimmed)) {
     const r = parseHana(trimmed);
+    if (r) return { ok: true, data: r };
+  }
+  if (/발행정보/.test(trimmed) && /컬리/.test(trimmed)) {
+    const r = parseKurly(trimmed);
     if (r) return { ok: true, data: r };
   }
   return { ok: false, raw: text };
